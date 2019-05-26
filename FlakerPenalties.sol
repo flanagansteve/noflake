@@ -27,6 +27,10 @@ contract FlakerPenalties {
     // A mapping from inviters to meeting structs
     mapping(address=>Meeting[]) stakedMeetings;
 
+    function setMeetingCharge(uint amt) public {
+        stakeRates[msg.sender] = amt;
+    }
+
     function invite(address payable invitee, uint invitedDate, uint duration) public payable {
         require(msg.value >= stakeRates[invitee] * duration, "You must stake more to invite this person - look up their rate");
         stakedMeetings[msg.sender].push(Meeting(invitedDate, invitee, msg.value, false));
