@@ -1,8 +1,17 @@
 pragma solidity ^0.5.1;
-
+  
 contract FlakerPenalties {
 
     // TODO we should probably be validating meeting dates as > now
+    // TODO we need an oracle that allows the contract to observe a no-show (or lateness)
+    // and penalise
+        // we could have one or both parties report this but that is definitely open to
+        // abuse/manipulation
+    // TODO ways for the invitee to reschedule
+        // we should probably let the inviter set up penalties for that too. that way,
+        // if its an invitation going up the social ladder, the invitee should not be
+        // penalised, but if its going down it, the invitee may be penalised. The system
+        // participants will be able to sort that out themselves :)
 
     // The wei per minute that must be staked to invite a particular addr out
     mapping(address=>uint) stakeRates;
@@ -10,17 +19,18 @@ contract FlakerPenalties {
     struct Meeting {
         // The date of the meeting in unix time
         uint date;
-        address invitee;
+        address payable invitee;
         uint atStake;
         bool happening;
     }
+    event MeetingSaved(address inviter, uint meetingID);
     // A mapping from inviters to meeting structs
     mapping(address=>Meeting[]) stakedMeetings;
 
-    function invite(address invitee, uint invitedDate, uint duration) public payable {
+    function invite(address payable invitee, uint invitedDate, uint duration) public payable {
         require(msg.value >= stakeRates[invitee] * duration, "You must stake more to invite this person - look up their rate");
         stakedMeetings[msg.sender].push(Meeting(invitedDate, invitee, msg.value, false));
-        // TODO need to emit an event so that the inviter can get the ID to give the invitee
+        emit MeetingSaved(msg.sender, stakedMeetings[msg.sender].length - 1);
     }
 
     function accept(address inviter, uint meetingID) public payable {
@@ -33,7 +43,7 @@ contract FlakerPenalties {
     function reschedule(uint meetingID, uint newDate) public payable {
         // TODO this should use safemath tbh
         require(msg.value >= stakedMeetings[msg.sender][meetingID].atStake / 10);
-        this.transfer(msg.value, stakedMeetings[msg.sender][meetingID].invitee);
+        stakedMeetings[msg.sender][meetingID].invitee.transfer(msg.value);
         stakedMeetings[msg.sender][meetingID].date = newDate;
     }
 
@@ -41,16 +51,14 @@ contract FlakerPenalties {
     function cancel(uint meetingID) public payable {
         // TODO this should use safemath tbh
         require(msg.value >= stakedMeetings[msg.sender][meetingID].atStake / 2);
-        this.transfer(msg.value, stakedMeetings[msg.sender][meetingID].invitee);
+        stakedMeetings[msg.sender][meetingID].invitee.transfer(msg.value);
         stakedMeetings[msg.sender][meetingID].happening = false;
     }
 
-    // TODO an oracle that allows the contract to observe a no-show and penalise
-
     // currently going with inviter since its fewer params lol
     function meetingDone(uint meetingID) public {
-        this.transfer(msg.sender, stakedMeetings[msg.sender][meetingID].atStake);
-        this.transfer(stakedMeetings[msg.sender][meetingID].invitee, stakedMeetings[msg.sender][meetingID].atStake);
+        msg.sender.transfer(stakedMeetings[msg.sender][meetingID].atStake);
+        stakedMeetings[msg.sender][meetingID].invitee.transfer(stakedMeetings[msg.sender][meetingID].atStake);
         stakedMeetings[msg.sender][meetingID].happening = false;
     }
 }
